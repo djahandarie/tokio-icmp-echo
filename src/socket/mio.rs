@@ -2,8 +2,8 @@ use std::io;
 
 use std::os::unix::io::{AsRawFd, RawFd};
 
-use mio::{Evented, Poll, PollOpt, Ready, Token};
 use mio::unix::EventedFd;
+use mio::{Evented, Poll, PollOpt, Ready, Token};
 use socket2::{Domain, Protocol, SockAddr, Socket as Socket2, Type};
 
 pub struct Socket {

@@ -1,10 +1,10 @@
 use std::fmt;
 
-use failure::{Fail, Context, Backtrace};
+use failure::{Backtrace, Context, Fail};
 
 #[derive(Debug)]
 pub struct Error {
-    inner: Context<ErrorKind>
+    inner: Context<ErrorKind>,
 }
 
 impl Fail for Error {
@@ -25,7 +25,9 @@ impl fmt::Display for Error {
 
 impl From<ErrorKind> for Error {
     fn from(kind: ErrorKind) -> Error {
-        Error { inner: Context::new(kind) }
+        Error {
+            inner: Context::new(kind),
+        }
     }
 }
 
@@ -38,9 +40,7 @@ impl From<Context<ErrorKind>> for Error {
 impl From<::std::io::Error> for Error {
     fn from(error: ::std::io::Error) -> Self {
         Error {
-            inner: Context::new(ErrorKind::IoError {
-                error
-            })
+            inner: Context::new(ErrorKind::IoError { error }),
         }
     }
 }
@@ -52,7 +52,5 @@ pub enum ErrorKind {
     #[fail(display = "internal error")]
     InternalError,
     #[fail(display = "io error: {}", error)]
-    IoError {
-        error: ::std::io::Error
-    }
+    IoError { error: ::std::io::Error },
 }

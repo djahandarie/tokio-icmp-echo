@@ -2,24 +2,24 @@ use std::io;
 
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
-use std::time::{Instant, Duration};
-use std::task::{Poll, Context};
 use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::time::{Duration, Instant};
 
-use futures::future::{Future, FutureExt, select};
-use futures::stream::Stream;
 use futures::channel::oneshot;
-use rand::random;
+use futures::future::{select, Future, FutureExt};
+use futures::stream::Stream;
 use parking_lot::Mutex;
+use rand::random;
 use socket2::{Domain, Protocol, Type};
 
 use tokio::time::{delay_until, Delay};
 
 use crate::errors::{Error, ErrorKind};
+use crate::packet::{EchoReply, EchoRequest, IcmpV4, IcmpV6, ICMP_HEADER_SIZE};
 use crate::packet::{IpV4Packet, IpV4Protocol};
-use crate::packet::{ICMP_HEADER_SIZE, IcmpV4, IcmpV6, EchoRequest, EchoReply};
-use crate::socket::{Socket, Send};
+use crate::socket::{Send, Socket};
 
 const DEFAULT_TIMEOUT: u64 = 2;
 const TOKEN_SIZE: usize = 24;
@@ -51,7 +51,7 @@ impl PingState {
 /// Represent a future that resolves into ping response time, resolves into `None` if timed out.
 #[must_use = "futures do nothing unless polled"]
 pub struct PingFuture {
-    inner: PingFutureKind
+    inner: PingFutureKind,
 }
 
 enum PingFutureKind {
@@ -81,10 +81,11 @@ impl Future for PingFuture {
                     match Pin::new(send).poll(cx) {
                         Poll::Pending => (),
                         Poll::Ready(Ok(_)) => swap_send = true,
-                        Poll::Ready(Err(_)) => return Poll::Ready(Err(ErrorKind::InternalError.into())),
+                        Poll::Ready(Err(_)) => {
+                            return Poll::Ready(Err(ErrorKind::InternalError.into()))
+                        }
                     }
                 }
-
 
                 if swap_send {
                     normal.send = None;
@@ -94,8 +95,10 @@ impl Future for PingFuture {
                     Poll::Pending => (),
                     Poll::Ready(Ok(stop_time)) => {
                         return Poll::Ready(Ok(Some(stop_time - normal.start_time)))
-                    },
-                    Poll::Ready(Err(_)) => return Poll::Ready(Err(ErrorKind::InternalError.into())),
+                    }
+                    Poll::Ready(Err(_)) => {
+                        return Poll::Ready(Err(ErrorKind::InternalError.into()))
+                    }
                 }
 
                 match Pin::new(&mut normal.delay).poll(cx) {
@@ -120,8 +123,7 @@ impl Drop for PingFuture {
             PingFutureKind::Normal(ref normal) => {
                 normal.state.remove(&normal.token);
             }
-            | PingFutureKind::InvalidProtocol
-            | PingFutureKind::PacketEncodeError => (),
+            PingFutureKind::InvalidProtocol | PingFutureKind::PacketEncodeError => (),
         }
     }
 }
@@ -231,7 +233,7 @@ impl Stream for PingChainStream {
             Poll::Pending => {
                 self.future = Some(future);
                 Poll::Pending
-            },
+            }
         }
     }
 }
@@ -296,8 +298,7 @@ impl Pinger {
 
         let v4_finalize = if let Some(v4_socket) = sockets.v4() {
             let (s, r) = oneshot::channel();
-            let receiver =
-                Receiver::<IcmpV4>::new(v4_socket.clone(), state.clone());
+            let receiver = Receiver::<IcmpV4>::new(v4_socket.clone(), state.clone());
             tokio::spawn(select(receiver, r).map(|_| ()));
             Some(s)
         } else {
@@ -306,8 +307,7 @@ impl Pinger {
 
         let v6_finalize = if let Some(v6_socket) = sockets.v6() {
             let (s, r) = oneshot::channel();
-            let receiver =
-                Receiver::<IcmpV6>::new(v6_socket.clone(), state.clone());
+            let receiver = Receiver::<IcmpV6>::new(v6_socket.clone(), state.clone());
             tokio::spawn(select(receiver, r).map(|_| ()));
             Some(s)
         } else {
@@ -359,7 +359,7 @@ impl Pinger {
             if dest.is_ipv4() {
                 (
                     request.encode::<IcmpV4>(&mut buffer[..]),
-                    self.inner.sockets.v4().cloned()
+                    self.inner.sockets.v4().cloned(),
                 )
             } else {
                 (
@@ -369,20 +369,19 @@ impl Pinger {
             }
         };
 
-
         let socket = match mb_socket {
             Some(socket) => socket,
             None => {
                 return PingFuture {
-                    inner: PingFutureKind::InvalidProtocol
+                    inner: PingFutureKind::InvalidProtocol,
                 }
             }
         };
 
         if let Err(_) = encode_result {
             return PingFuture {
-                inner: PingFutureKind::PacketEncodeError
-            }
+                inner: PingFutureKind::PacketEncodeError,
+            };
         }
 
         let send_future = socket.send_to(buffer, &dest);
@@ -395,7 +394,7 @@ impl Pinger {
                 delay: delay_until(deadline.into()),
                 send: Some(send_future),
                 receiver,
-            })
+            }),
         }
     }
 }

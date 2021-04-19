@@ -1,13 +1,13 @@
 use std::io;
-use std::sync::Arc;
-use std::task::{Poll, Context};
 use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
 
+use ::mio::Ready;
+use socket2::{Domain, Protocol, SockAddr, Type};
 use std::future::Future;
 use std::net::SocketAddr;
-use ::mio::Ready;
 use tokio::io::PollEvented;
-use socket2::{Domain, Protocol, SockAddr, Type};
 
 use super::mio;
 
@@ -17,11 +17,7 @@ pub struct Socket {
 }
 
 impl Socket {
-    pub fn new(
-        domain: Domain,
-        type_: Type,
-        protocol: Protocol,
-    ) -> io::Result<Self> {
+    pub fn new(domain: Domain, type_: Type, protocol: Protocol) -> io::Result<Self> {
         let socket = mio::Socket::new(domain, type_, protocol)?;
         let socket = PollEvented::new(socket)?;
         Ok(Self {
@@ -43,7 +39,6 @@ impl Socket {
     }
 
     pub fn recv(&self, buffer: &mut [u8], cx: &mut Context<'_>) -> Poll<Result<usize, io::Error>> {
-
         match self.socket.poll_read_ready(cx, Ready::readable()) {
             Poll::Ready(Ok(_)) => (),
             Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
@@ -78,12 +73,12 @@ fn send_to(
     socket: &Arc<PollEvented<mio::Socket>>,
     buf: &[u8],
     target: &SockAddr,
-    cx: &mut Context<'_>
+    cx: &mut Context<'_>,
 ) -> Poll<Result<usize, io::Error>> {
     match socket.poll_write_ready(cx) {
         Poll::Ready(Ok(_)) => (),
         Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-        Poll::Pending => return Poll::Pending
+        Poll::Pending => return Poll::Pending,
     }
 
     match socket.get_ref().send_to(buf, target) {

@@ -26,7 +26,8 @@
 //! }
 //! ```
 
-#[macro_use] extern crate failure;
+#[macro_use]
+extern crate failure;
 
 mod errors;
 mod packet;
@@ -34,4 +35,4 @@ mod ping;
 mod socket;
 
 pub use errors::Error;
-pub use ping::{Pinger, PingChain, PingChainStream, PingFuture};
+pub use ping::{PingChain, PingChainStream, PingFuture, Pinger};
