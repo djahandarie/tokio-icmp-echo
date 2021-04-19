@@ -2,8 +2,10 @@ use std::io;
 
 use std::os::unix::io::{AsRawFd, RawFd};
 
-use mio::unix::EventedFd;
-use mio::{Evented, Poll, PollOpt, Ready, Token};
+use std::io::Read;
+
+use mio::unix::SourceFd;
+use mio::{event::Source, Interest, Registry, Token};
 use socket2::{Domain, Protocol, SockAddr, Socket as Socket2, Type};
 
 pub struct Socket {
@@ -23,7 +25,7 @@ impl Socket {
     }
 
     pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
-        self.socket.recv(buf)
+        (&self.socket).read(buf)
     }
 }
 
@@ -33,28 +35,16 @@ impl AsRawFd for Socket {
     }
 }
 
-impl Evented for Socket {
-    fn register(
-        &self,
-        poll: &Poll,
-        token: Token,
-        interest: Ready,
-        opts: PollOpt,
-    ) -> io::Result<()> {
-        EventedFd(&self.as_raw_fd()).register(poll, token, interest, opts)
+impl Source for Socket {
+    fn register(&mut self, poll: &Registry, token: Token, interest: Interest) -> io::Result<()> {
+        SourceFd(&self.as_raw_fd()).register(poll, token, interest)
     }
 
-    fn reregister(
-        &self,
-        poll: &Poll,
-        token: Token,
-        interest: Ready,
-        opts: PollOpt,
-    ) -> io::Result<()> {
-        EventedFd(&self.as_raw_fd()).reregister(poll, token, interest, opts)
+    fn reregister(&mut self, poll: &Registry, token: Token, interest: Interest) -> io::Result<()> {
+        SourceFd(&self.as_raw_fd()).reregister(poll, token, interest)
     }
 
-    fn deregister(&self, poll: &Poll) -> io::Result<()> {
-        EventedFd(&self.as_raw_fd()).deregister(poll)
+    fn deregister(&mut self, poll: &Registry) -> io::Result<()> {
+        SourceFd(&self.as_raw_fd()).deregister(poll)
     }
 }

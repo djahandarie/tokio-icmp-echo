@@ -14,7 +14,7 @@ use parking_lot::Mutex;
 use rand::random;
 use socket2::{Domain, Protocol, Type};
 
-use tokio::time::{delay_until, Delay};
+use tokio::time::{sleep_until, Sleep};
 
 use crate::errors::{Error, ErrorKind};
 use crate::packet::{EchoReply, EchoRequest, IcmpV4, IcmpV6, ICMP_HEADER_SIZE};
@@ -64,7 +64,7 @@ struct NormalPingFutureKind {
     start_time: Instant,
     state: PingState,
     token: Token,
-    delay: Delay,
+    sleep: Pin<Box<Sleep>>,
     send: Option<Send<EchoRequestBuffer>>,
     receiver: oneshot::Receiver<Instant>,
 }
@@ -101,7 +101,7 @@ impl Future for PingFuture {
                     }
                 }
 
-                match Pin::new(&mut normal.delay).poll(cx) {
+                match normal.sleep.as_mut().poll(cx) {
                     Poll::Pending => (),
                     Poll::Ready(_) => return Poll::Ready(Ok(None)),
                 }
@@ -210,7 +210,7 @@ impl PingChain {
 /// Stream of sequential ping response times, iterates `None` if timed out.
 pub struct PingChainStream {
     chain: PingChain,
-    future: Option<PingFuture>,
+    future: Option<Pin<Box<PingFuture>>>,
 }
 
 impl PingChainStream {
@@ -226,9 +226,12 @@ impl Stream for PingChainStream {
     type Item = Result<Option<Duration>, Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut future = self.future.take().unwrap_or_else(|| self.chain.send());
+        let mut future = self
+            .future
+            .take()
+            .unwrap_or_else(|| Box::pin(self.chain.send()));
 
-        match Pin::new(&mut future).poll(cx) {
+        match future.as_mut().poll(cx) {
             Poll::Ready(result) => Poll::Ready(Some(result)),
             Poll::Pending => {
                 self.future = Some(future);
@@ -259,8 +262,8 @@ enum Sockets {
 
 impl Sockets {
     fn new() -> io::Result<Self> {
-        let mb_v4socket = Socket::new(Domain::ipv4(), Type::raw(), Protocol::icmpv4());
-        let mb_v6socket = Socket::new(Domain::ipv6(), Type::raw(), Protocol::icmpv6());
+        let mb_v4socket = Socket::new(Domain::IPV4, Type::RAW, Protocol::ICMPV4);
+        let mb_v6socket = Socket::new(Domain::IPV6, Type::RAW, Protocol::ICMPV6);
         match (mb_v4socket, mb_v6socket) {
             (Ok(v4_socket), Ok(v6_socket)) => Ok(Sockets::Both {
                 v4: v4_socket,
@@ -391,7 +394,7 @@ impl Pinger {
                 start_time: Instant::now(),
                 state: self.inner.state.clone(),
                 token,
-                delay: delay_until(deadline.into()),
+                sleep: Box::pin(sleep_until(deadline.into())),
                 send: Some(send_future),
                 receiver,
             }),

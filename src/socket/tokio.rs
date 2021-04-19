@@ -3,23 +3,22 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use ::mio::Ready;
 use socket2::{Domain, Protocol, SockAddr, Type};
 use std::future::Future;
 use std::net::SocketAddr;
-use tokio::io::PollEvented;
+use tokio::io::unix::AsyncFd;
 
 use super::mio;
 
 #[derive(Clone)]
 pub struct Socket {
-    socket: Arc<PollEvented<mio::Socket>>,
+    socket: Arc<AsyncFd<mio::Socket>>,
 }
 
 impl Socket {
     pub fn new(domain: Domain, type_: Type, protocol: Protocol) -> io::Result<Self> {
         let socket = mio::Socket::new(domain, type_, protocol)?;
-        let socket = PollEvented::new(socket)?;
+        let socket = AsyncFd::new(socket)?;
         Ok(Self {
             socket: Arc::new(socket),
         })
@@ -39,19 +38,15 @@ impl Socket {
     }
 
     pub fn recv(&self, buffer: &mut [u8], cx: &mut Context<'_>) -> Poll<Result<usize, io::Error>> {
-        match self.socket.poll_read_ready(cx, Ready::readable()) {
-            Poll::Ready(Ok(_)) => (),
-            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-            Poll::Pending => return Poll::Pending,
-        }
-
-        match self.socket.get_ref().recv(buffer) {
-            Ok(n) => Poll::Ready(Ok(n)),
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                self.socket.clear_read_ready(cx, Ready::readable())?;
-                Poll::Pending
+        loop {
+            match self.socket.poll_read_ready(cx) {
+                Poll::Ready(Ok(mut guard)) => match guard.try_io(|fd| fd.get_ref().recv(buffer)) {
+                    Ok(res) => return Poll::Ready(res),
+                    Err(_) => continue,
+                },
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Pending => return Poll::Pending,
             }
-            Err(e) => Poll::Ready(Err(e)),
         }
     }
 }
@@ -62,7 +57,7 @@ pub struct Send<T> {
 
 enum SendState<T> {
     Writing {
-        socket: Arc<PollEvented<mio::Socket>>,
+        socket: Arc<AsyncFd<mio::Socket>>,
         buf: T,
         addr: SockAddr,
     },
@@ -70,26 +65,21 @@ enum SendState<T> {
 }
 
 fn send_to(
-    socket: &Arc<PollEvented<mio::Socket>>,
+    socket: &Arc<AsyncFd<mio::Socket>>,
     buf: &[u8],
     target: &SockAddr,
     cx: &mut Context<'_>,
 ) -> Poll<Result<usize, io::Error>> {
-    match socket.poll_write_ready(cx) {
-        Poll::Ready(Ok(_)) => (),
-        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-        Poll::Pending => return Poll::Pending,
-    }
-
-    match socket.get_ref().send_to(buf, target) {
-        Ok(n) => Poll::Ready(Ok(n)),
-        Err(e) => {
-            if e.kind() == io::ErrorKind::WouldBlock {
-                socket.clear_write_ready(cx)?;
-                Poll::Pending
-            } else {
-                Poll::Ready(Err(e))
+    loop {
+        match socket.poll_write_ready(cx) {
+            Poll::Ready(Ok(mut guard)) => {
+                match guard.try_io(|fd| fd.get_ref().send_to(buf, target)) {
+                    Ok(res) => return Poll::Ready(res),
+                    Err(_) => continue,
+                }
             }
+            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+            Poll::Pending => return Poll::Pending,
         }
     }
 }
