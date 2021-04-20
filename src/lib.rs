@@ -1,7 +1,6 @@
 //! tokio-ping is an asynchronous ICMP pinging library.
 //!
 //! The repository is located at <https://github.com/knsd/tokio-ping/>.
-//!
 //! # Usage example
 //!
 //! Note, sending and receiving ICMP packets requires privileges.
@@ -25,9 +24,6 @@
 //!     }).await;
 //! }
 //! ```
-
-#[macro_use]
-extern crate failure;
 
 mod errors;
 mod packet;

@@ -16,7 +16,7 @@ use socket2::{Domain, Protocol, Type};
 
 use tokio::time::{sleep_until, Sleep};
 
-use crate::errors::{Error, ErrorKind};
+use crate::Error;
 use crate::packet::{EchoReply, EchoRequest, IcmpV4, IcmpV6, ICMP_HEADER_SIZE};
 use crate::packet::{IpV4Packet, IpV4Protocol};
 use crate::socket::{Send, Socket};
@@ -82,7 +82,7 @@ impl Future for PingFuture {
                         Poll::Pending => (),
                         Poll::Ready(Ok(_)) => swap_send = true,
                         Poll::Ready(Err(_)) => {
-                            return Poll::Ready(Err(ErrorKind::InternalError.into()))
+                            return Poll::Ready(Err(Error::InternalError))
                         }
                     }
                 }
@@ -97,7 +97,7 @@ impl Future for PingFuture {
                         return Poll::Ready(Ok(Some(stop_time - normal.start_time)))
                     }
                     Poll::Ready(Err(_)) => {
-                        return Poll::Ready(Err(ErrorKind::InternalError.into()))
+                        return Poll::Ready(Err(Error::InternalError))
                     }
                 }
 
@@ -107,10 +107,10 @@ impl Future for PingFuture {
                 }
             }
             PingFutureKind::InvalidProtocol => {
-                return Poll::Ready(Err(ErrorKind::InvalidProtocol.into()))
+                return Poll::Ready(Err(Error::InvalidProtocol))
             }
             PingFutureKind::PacketEncodeError => {
-                return Poll::Ready(Err(ErrorKind::InternalError.into()))
+                return Poll::Ready(Err(Error::InternalError))
             }
         }
         Poll::Pending
