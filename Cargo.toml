@@ -11,14 +11,14 @@ categories = ["network-programming", "asynchronous"]
 edition = "2018"
 
 [dependencies]
-failure = "0.1.1"
-futures = "0.3.1"
+failure = "0.1"
+futures = "0.3"
 libc = "0.2"
 mio = { version = "0.7", features = ["os-ext"] }
-rand = "0.4"
+rand = "0.8"
 socket2 = { version = "0.4", features = ["all"] }
-tokio = { version = "1.5.0", features = ["rt", "time", "net"] }
-parking_lot = "0.5.5"
+tokio = { version = "1.5", features = ["rt", "time", "net"] }
+parking_lot = "0.11"
 
 [dev-dependencies]
-tokio = { version = "1.5.0", features = ["rt-multi-thread", "time", "macros"] }
+tokio = { version = "1.5", features = ["rt-multi-thread", "time", "macros"] }
