@@ -16,8 +16,13 @@ pub struct Socket {
 }
 
 impl Socket {
-    pub fn new(domain: Domain, type_: Type, protocol: Protocol) -> io::Result<Self> {
-        let socket = mio::Socket::new(domain, type_, protocol)?;
+    pub fn new(
+        domain: Domain,
+        type_: Type,
+        protocol: Protocol,
+        bind: Option<SockAddr>,
+    ) -> io::Result<Self> {
+        let socket = mio::Socket::new(domain, type_, protocol, bind.into())?;
         let socket = AsyncFd::new(socket)?;
         Ok(Self {
             socket: Arc::new(socket),

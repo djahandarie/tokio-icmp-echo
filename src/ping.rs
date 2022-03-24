@@ -1,7 +1,7 @@
 use std::io;
 
 use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -12,7 +12,7 @@ use futures::future::{select, Future, FutureExt};
 use futures::stream::Stream;
 use parking_lot::Mutex;
 use rand::random;
-use socket2::{Domain, Protocol, Type};
+use socket2::{Domain, Protocol, SockAddr, Type};
 
 use tokio::time::{sleep_until, Sleep};
 
@@ -253,9 +253,19 @@ enum Sockets {
 }
 
 impl Sockets {
-    fn new() -> io::Result<Self> {
-        let mb_v4socket = Socket::new(Domain::IPV4, Type::RAW, Protocol::ICMPV4);
-        let mb_v6socket = Socket::new(Domain::IPV6, Type::RAW, Protocol::ICMPV6);
+    fn new(bind_v4: Option<Ipv4Addr>, bind_v6: Option<Ipv6Addr>) -> io::Result<Self> {
+        let mb_v4socket = Socket::new(
+            Domain::IPV4,
+            Type::RAW,
+            Protocol::ICMPV4,
+            bind_v4.map(|ip| SocketAddr::new(ip.into(), 0).into()),
+        );
+        let mb_v6socket = Socket::new(
+            Domain::IPV6,
+            Type::RAW,
+            Protocol::ICMPV6,
+            bind_v6.map(|ip| SocketAddr::new(ip.into(), 0).into()),
+        );
         match (mb_v4socket, mb_v6socket) {
             (Ok(v4_socket), Ok(v6_socket)) => Ok(Sockets::Both {
                 v4: v4_socket,
@@ -286,8 +296,8 @@ impl Sockets {
 
 impl Pinger {
     /// Create new `Pinger` instance, will fail if unable to create both IPv4 and IPv6 sockets.
-    pub async fn new() -> Result<Self, Error> {
-        let sockets = Sockets::new()?;
+    pub async fn new(bind_v4: Option<Ipv4Addr>, bind_v6: Option<Ipv6Addr>) -> Result<Self, Error> {
+        let sockets = Sockets::new(bind_v4, bind_v6)?;
 
         let state = PingState::new();
 
